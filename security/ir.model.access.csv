@@ -1,0 +1,2 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_fin-beer-reports_fin-beer-reports,fin-beer-reports.fin-beer-reports,model_fin-beer-reports_fin-beer-reports,,1,0,0,0
