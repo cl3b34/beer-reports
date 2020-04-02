@@ -1,0 +1,830 @@
+-- 20191202 - champagne bottle is not beer (cleanup script)
+-- 20190904 - update the 5% beers
+-- 20190811 - Beer Kegged. bottles included on Palpa report
+-- 20190807 - other possible product template names for 0.375 and 0.75 cl bottles. Fixing quartely report that has gone broken somehow.
+-- 20190604 - Display partner name for Palpa. Necessary to remove exports.
+-- 20190515 - Formatting, print EAN, then liters in valvira quartely. Remove state.
+-- 20190503 - Palpa report, reorganized dropbox folders
+-- 20190502 - Started tracking changes
+
+
+--Credentials
+-------------
+ssh bitnami@erp.coolhead.fi
+
+psql -U postgres -d bitnami_odoo
+cMQr4BoIC7XE
+
+--FIRST MAKE SURE THE DATA MAKES SENSE
+--------------------------------------
+
+-- Update existing products in DB:
+-- Alcohol %
+update product_template set alcohol_pct=2.8 where name like '% 2.8\%%';
+update product_template set alcohol_pct=3 where name like '% 3\%%';
+update product_template set alcohol_pct=3.5 where name like '% 3.5\%%';
+update product_template set alcohol_pct=4 where name like '% 4\%%';
+update product_template set alcohol_pct=4.5 where name like '% 4.5\%%';
+update product_template set alcohol_pct=4.7 where name like '% 4.7\%%';
+update product_template set alcohol_pct=4.9 where name like '% 4.9\%%';
+update product_template set alcohol_pct=5 where name like '% 5\%%';
+update product_template set alcohol_pct=5.5 where name like '% 5.5\%%';
+update product_template set alcohol_pct=5.7 where name like '% 5.7\%%';
+update product_template set alcohol_pct=5.9 where name like '% 5.9\%%';
+update product_template set alcohol_pct=6 where name like '% 6\%%';
+update product_template set alcohol_pct=6.1 where name like '% 6.1\%%';
+update product_template set alcohol_pct=6.3 where name like '% 6.3\%%';
+update product_template set alcohol_pct=6.5 where name like '% 6.5\%%';
+update product_template set alcohol_pct=7 where name like '% 7\%%';
+update product_template set alcohol_pct=7.5 where name like '% 7.5\%%';
+update product_template set alcohol_pct=8 where name like '% 8\%%';
+update product_template set alcohol_pct=10 where name like '% 10\%%';
+update product_template set alcohol_pct=10.2 where name like '% 10.2\%%';
+update product_template set alcohol_pct=10.3 where name like '% 10.3\%%';
+update product_template set alcohol_pct=11 where name like '% 11\%%';
+update product_template set alcohol_pct=12 where name like '% 12\%%';
+update product_template set alcohol_pct=20 where name like '% 20\%%';
+
+-- Package sizes
+update product_template set liter=10 where name like '%10L%';
+update product_template set liter=20 where name like '%20L%';
+update product_template set liter=30 where name like '%30L%';
+update product_template set liter=40 where name like '%40L%';
+update product_template set liter=0.33 where name like '%0.33%';
+update product_template set liter=0.33 where name like '%330%';
+update product_template set liter=7.92 where name like '%24x330%';
+update product_template set liter=0.375 where name like '%375%';
+update product_template set liter=0.375 where name like '%0.375%';
+update product_template set liter=0.75 where name like '%750%';
+update product_template set liter=0.75 where name like '%0.75%';
+update product_template set liter=4.5 where name like '%6x750%';
+update product_template set liter=4.5 where name like '%12x375%';
+
+--PALPA
+-------
+-- Palpa needs to know the amount of cans and bottles sold within a month.
+
+Copy (
+
+select 
+	res_partner.display_name,
+   	product_template.name, 	
+	'''' || product_product.barcode,
+	NULL as package_size,
+	NULL as delivered,
+	sum((quantity) * 0.15) as pantti,
+	sum(quantity) as qtd
+from
+	account_invoice, account_invoice_line, product_template, product_product, res_partner
+ where 
+	(state='open' or state='paid') 
+and 
+	(date_invoice >= date_trunc('month', current_date - interval '1' month)
+  		and date_invoice < date_trunc('month', current_date)) 
+and	
+	account_invoice.id=account_invoice_line.invoice_id
+and 	
+	product_template.id=product_product.product_tmpl_id 
+and 
+	account_invoice_line.product_id=product_product.id
+and
+	account_invoice.partner_shipping_id=res_partner.id  
+-- remove the refund invoice, but leave the original invoice
+and
+	number not in (select number from account_invoice where type like '%_refund')
+and
+	( product_template.name LIKE '%330%' or product_template.name LIKE '%0.33%' or product_template.name LIKE '%x375%' or product_template.name LIKE '%x0.375%' or product_template.name LIKE '%x750%' or product_template.name LIKE '%x0.75%'  )
+group by 
+--	res_partner.id,
+	product_template.name,  
+	res_partner.display_name,
+	product_product.barcode
+order by 
+	 product_template.name
+--	res_partner.display_name
+
+
+) TO '/tmp/palpa-report.csv'
+WITH CSV DELIMITER '|';
+
+
+
+
+
+--Palpa REFUNDS
+---------------
+
+Copy (
+
+select 
+	res_partner.display_name,
+   	product_template.name, 	
+	'''' || product_product.barcode,
+	NULL as package_size,
+	NULL as delivered,
+	sum((quantity) * 0.15) as pantti,
+	sum(quantity) as qtd
+from
+	account_invoice, account_invoice_line, product_template, product_product, res_partner
+ where 
+	(state='open' or state='paid') 
+and 
+	(date_invoice >= date_trunc('month', current_date - interval '1' month)
+  		and date_invoice < date_trunc('month', current_date)) 
+and	
+	account_invoice.id=account_invoice_line.invoice_id
+and 	
+	product_template.id=product_product.product_tmpl_id 
+and 
+	account_invoice_line.product_id=product_product.id
+and
+	account_invoice.partner_shipping_id=res_partner.id  
+-- Leave only the refunds
+and
+	number in (select number from account_invoice where type like '%_refund')
+and
+	( product_template.name LIKE '%330%' or product_template.name LIKE '%0.33%' or product_template.name LIKE '%x375%' or product_template.name LIKE '%x0.375%' or product_template.name LIKE '%x750%' or product_template.name LIKE '%x0.75%'  )
+group by 
+--	res_partner.id,
+	product_template.name,  
+	res_partner.display_name,
+	product_product.barcode
+order by 
+	 product_template.name
+--	res_partner.display_name
+
+
+) TO
+	'/tmp/palpa-refunds.csv'
+WITH CSV DELIMITER '|';
+
+
+
+--Vero report
+-------------
+
+Copy (
+
+select 
+	res_partner.display_name,
+    product_template.name, 
+--	alcohol_pct, 
+--	sum(quantity) as qtd, 
+	(sum(quantity) * liter) as liter, 
+	((sum(quantity) * liter) * alcohol_pct) as alcohol_cl, 
+--	((sum(quantity) * liter) * (alcohol_pct/100)) as alcohol_l, 
+	((sum(quantity) * liter) * (alcohol_pct/100) * 18.25) as excise_tax  	
+from
+	account_invoice, account_invoice_line, product_template, product_product, res_partner
+ where 
+	(state='open' or state='paid') 
+and 
+	(date_invoice >= date_trunc('month', current_date - interval '1' month)
+  		and date_invoice < date_trunc('month', current_date)) 
+and	
+	account_invoice.id=account_invoice_line.invoice_id
+and 	
+	product_template.id=product_product.product_tmpl_id 
+and 
+	account_invoice_line.product_id=product_product.id
+and
+	account_invoice.partner_id=res_partner.id  
+-- remove the refund invoice
+and
+	number not in (select number from account_invoice where type like '%_refund')
+and 
+	product_template.name!='Posti'		
+and
+	product_template.name NOT LIKE '%empty%'
+and 
+	product_template.name NOT LIKE '%eanie %'
+and 
+	product_template.name NOT LIKE '%Paper bag%'
+and 
+	product_template.name NOT LIKE '%delivery%'
+and 
+	product_template.name NOT LIKE '%Viking%'
+and 
+	product_template.name NOT LIKE '%Blanka%'
+and 
+	product_template.name NOT LIKE '%freight%'
+and 
+	product_template.name NOT LIKE '%T-Shirt%'
+and 
+	product_template.name NOT LIKE '%t-shirt%'
+and 
+	product_template.name NOT LIKE '%Brewery Tour%'	
+and 
+	product_template.name NOT LIKE '%Lindr beer cooler%'		
+and 
+	product_template.name NOT LIKE '%Canvas Bag%'	
+and 
+	product_template.name NOT LIKE '%Beer Tap%'
+and 
+	product_template.name NOT LIKE '%4 pack can%'
+group by 
+	product_template.name, alcohol_pct, liter, res_partner.display_name
+order by 
+--	 product_template.name
+	res_partner.display_name
+	
+) TO
+	'/tmp/vero-report.csv'
+WITH CSV DELIMITER '|';
+
+
+
+
+-- VERO REPORT - Refunds
+-------------------------
+
+-- Report separately as 'vahennykset' on Vero's interface, stuff returned to the stock
+
+Copy (
+
+select 
+	res_partner.display_name,
+    product_template.name, 
+--	alcohol_pct, 
+--	sum(quantity) as qtd, 
+	(sum(quantity) * liter) as liter, 
+	((sum(quantity) * liter) * alcohol_pct) as alcohol_cl, 
+--	((sum(quantity) * liter) * (alcohol_pct/100)) as alcohol_l, 
+	((sum(quantity) * liter) * (alcohol_pct/100) * 18.25) as excise_tax  	
+from
+	account_invoice, account_invoice_line, product_template, product_product, res_partner
+ where 
+	(state='open' or state='paid') 
+and 
+	(date_invoice >= date_trunc('month', current_date - interval '1' month)
+  		and date_invoice < date_trunc('month', current_date)) 
+and	
+	account_invoice.id=account_invoice_line.invoice_id
+and 	
+	product_template.id=product_product.product_tmpl_id 
+and 
+	account_invoice_line.product_id=product_product.id
+and
+	account_invoice.partner_id=res_partner.id  
+and
+-- Include only refunds, cancelled invoices and stuff returned to stock
+	number in (select number from account_invoice where type like '%_refund')
+and 
+	product_template.name!='Posti'		
+and
+	product_template.name NOT LIKE '%empty%'
+and 
+	product_template.name NOT LIKE '%eanie %'
+and 
+	product_template.name NOT LIKE '%Paper bag%'
+and 
+	product_template.name NOT LIKE '%delivery%'
+and 
+	product_template.name NOT LIKE '%Viking%'
+and 
+	product_template.name NOT LIKE '%Blanka%'
+and 
+	product_template.name NOT LIKE '%freight%'
+and 
+	product_template.name NOT LIKE '%T-Shirt%'
+and 
+	product_template.name NOT LIKE '%t-shirt%'
+and 
+	product_template.name NOT LIKE '%Brewery Tour%'	
+and 
+	product_template.name NOT LIKE '%Lindr beer cooler%'		
+and 
+	product_template.name NOT LIKE '%Canvas Bag%'	
+and 
+	product_template.name NOT LIKE '%Beer Tap%'
+and 
+	product_template.name NOT LIKE '%4 pack can%'
+group by 
+	product_template.name, alcohol_pct, liter, res_partner.display_name
+order by 
+--	 product_template.name
+	res_partner.display_name
+	
+) TO
+	'/tmp/vero-refund-report.csv'
+WITH CSV DELIMITER '|';
+
+
+
+-- BEER CANNED
+--------------
+-- statistics
+
+Copy (
+
+
+WITH tempTable (qty, liter, state, name, barcode ) as	
+(
+
+select 
+	sum(product_qty) as qty, 
+	(sum(product_qty) * liter) as liter,
+	state, 
+	product_template.name as name,
+	product_product.barcode as barcode
+from 
+	mrp_production, 
+	product_template,
+	product_product
+where 
+	mrp_production.product_id=product_product.id
+and
+	mrp_production.state='done'
+and
+	-- In January for previous year's report, use the dates otherwise the report will be empty
+	date_part('year', mrp_production.date_finished) = date_part('year', CURRENT_DATE)
+--	 ( mrp_production.date_finished >= '2019-01-01' and mrp_production.date_finished < '2019-12-01') 
+and
+	product_template.id=product_product.product_tmpl_id 
+and 
+	product_product.barcode is not null
+and
+	( product_template.name LIKE '%330%' or product_template.name LIKE '%0.33%' or product_template.name LIKE '%x375%' or product_template.name LIKE '%x0.375%' or product_template.name LIKE '%x750%' or product_template.name LIKE '%x0.75%'  )
+group by
+	product_product.barcode,
+	state,
+	product_template.name,
+	liter
+order by
+	product_template.name
+
+)
+select 'GRAND TOTAL' as name, sum(qty) as qty, sum(liter) as liter, '', '' from tempTable
+union all
+select name, qty, liter, state, barcode from tempTable order by qty asc
+	
+
+	
+) TO
+	'/tmp/beer-canned-report.csv'
+WITH CSV DELIMITER '|';
+
+
+-- BEER KEGGED
+-----------
+-- statistics
+
+
+Copy (
+
+
+WITH tempTable (qty, liter, state, name, barcode ) as	
+(
+
+select 
+	sum(product_qty) as qty, 
+	(sum(product_qty) * liter) as liter,
+	state, 
+	product_template.name as name,
+	product_product.barcode as barcode
+from 
+	mrp_production, 
+	product_template,
+	product_product
+where 
+	mrp_production.product_id=product_product.id
+and
+	mrp_production.state='done'
+and
+	date_part('year', mrp_production.date_finished) = date_part('year', CURRENT_DATE)
+--	 ( mrp_production.date_finished >= '2019-01-01' and mrp_production.date_finished < '2020-01-01') 
+and
+	product_template.id=product_product.product_tmpl_id 
+and 
+	product_product.barcode is not null
+and
+	( product_template.liter = 10 or product_template.liter = 20 or product_template.liter = 30  )
+group by
+	product_product.barcode,
+	state,
+	product_template.name,
+	liter
+order by
+	product_template.name
+
+)
+select 'GRAND TOTAL' as name, sum(qty) as qty, sum(liter) as liter, '', '' from tempTable
+union all
+select name, qty, liter, state, barcode from tempTable order by qty asc
+	
+
+	
+) TO
+	'/tmp/beer-kegged-report.csv'
+WITH CSV DELIMITER '|';
+
+
+
+
+-- VALVIRA monthly
+------------------
+
+
+Copy (
+
+select 
+	res_partner.display_name,
+   	product_template.name, 	
+	'''' || res_partner.alcohol_license as lupa,
+	NULL as TK,
+	NULL as MAA,
+	'''' || product_product.barcode,
+	(sum(quantity) * liter) as liter,   
+	sum(account_invoice_line.price_subtotal_signed) as vat0
+--	sum(quantity) as qtd, 
+--	res_partner.id,
+--	partner_shipping_id,
+from
+	account_invoice, account_invoice_line, product_template, product_product, res_partner
+ where 
+	(state='open' or state='paid') 
+and 
+	(date_invoice >= date_trunc('month', current_date - interval '1' month)
+  		and date_invoice < date_trunc('month', current_date)) 
+and	
+	account_invoice.id=account_invoice_line.invoice_id
+and 	
+	product_template.id=product_product.product_tmpl_id 
+and 
+	account_invoice_line.product_id=product_product.id
+and
+	account_invoice.partner_shipping_id=res_partner.id  
+-- remove the refund invoice, but leave the original invoice
+and
+	number not in (select number from account_invoice where type like '%_refund')
+and 
+	product_template.name!='Posti'		
+and
+	product_template.name NOT LIKE '%empty%'
+and 
+	product_template.name NOT LIKE '%eanie %'
+and 
+	product_template.name NOT LIKE '%Paper bag%'
+and 
+	product_template.name NOT LIKE '%delivery%'
+and 
+	product_template.name NOT LIKE '%Viking%'
+and 
+	product_template.name NOT LIKE '%Blanka%'
+and 
+	product_template.name NOT LIKE '%freight%'
+and 
+	product_template.name NOT LIKE '%T-Shirt%'
+and 
+	product_template.name NOT LIKE '%t-shirt%'
+and 
+	product_template.name NOT LIKE '%Brewery Tour%'	
+and 
+	product_template.name NOT LIKE '%Lindr beer cooler%'		
+and 
+	product_template.name NOT LIKE '%Canvas Bag%'	
+and 
+	product_template.name NOT LIKE '%Beer Tap%'
+and 
+	product_template.name NOT LIKE '%4 pack can%'
+group by 
+--	partner_shipping_id,
+	res_partner.id,
+	product_template.name,  
+	liter, 
+	res_partner.display_name,
+	res_partner.alcohol_license, 
+	product_product.barcode
+order by 
+--	 product_template.name
+	res_partner.display_name
+--	res_partner.alcohol_license
+
+) TO
+	'/tmp/valvira-monthly-report.csv'
+WITH CSV DELIMITER '|';
+
+
+
+--VALVIRA REFUNDS
+-----------------
+
+Copy (
+
+select 
+	res_partner.display_name,
+   	product_template.name,
+	'''' || res_partner.alcohol_license as lupa,
+	NULL as TK,
+	NULL as MAA,
+	'''' || product_product.barcode,
+	(sum(quantity) * liter)* -1 as liter,   
+	sum(account_invoice_line.price_subtotal_signed) as vat0
+from
+	account_invoice, account_invoice_line, product_template, product_product, res_partner
+ where 
+	(state='open' or state='paid') 
+and 
+	(date_invoice >= date_trunc('month', current_date - interval '1' month)
+  		and date_invoice < date_trunc('month', current_date)) 
+and	
+	account_invoice.id=account_invoice_line.invoice_id
+and 	
+	product_template.id=product_product.product_tmpl_id 
+and 
+	account_invoice_line.product_id=product_product.id
+and
+	account_invoice.partner_shipping_id=res_partner.id  
+and
+-- Select only the refunds
+	account_invoice.type like '%_refund'
+and 
+	product_template.name!='Posti'		
+and
+	product_template.name NOT LIKE '%empty%'
+and 
+	product_template.name NOT LIKE '%eanie %'
+and 
+	product_template.name NOT LIKE '%Paper bag%'
+and 
+	product_template.name NOT LIKE '%delivery%'
+and 
+	product_template.name NOT LIKE '%Viking%'
+and 
+	product_template.name NOT LIKE '%Blanka%'
+and 
+	product_template.name NOT LIKE '%freight%'
+and 
+	product_template.name NOT LIKE '%T-Shirt%'
+and 
+	product_template.name NOT LIKE '%t-shirt%'
+and 
+	product_template.name NOT LIKE '%Brewery Tour%'	
+and 
+	product_template.name NOT LIKE '%Lindr beer cooler%'		
+and 
+	product_template.name NOT LIKE '%Canvas Bag%'	
+and 
+	product_template.name NOT LIKE '%Beer Tap%'
+and 
+	product_template.name NOT LIKE '%4 pack can%'
+group by 
+	res_partner.id,
+	product_template.name,  
+	liter, 
+	res_partner.display_name,
+	res_partner.alcohol_license, 
+	product_product.barcode
+order by 
+	res_partner.display_name
+
+) TO
+	'/tmp/valvira-monthly-refunds-report.csv'
+WITH CSV DELIMITER '|';
+
+
+
+
+--VALVIRA quartely
+------------------
+-- statistics
+-- CHANGE THE DATE IN THE REPORT
+-- 18/Jan = Sept, Oct, Nov, Dec (kausi 1)
+-- 18/May = Jan, Feb, Mar, Apr (kausi 2)
+-- 18/Sept = May, Jun, Jul, Aug (kausi 3)
+
+Copy (
+
+
+WITH tempTable (qty, liter, state, name, barcode ) as	
+(
+select 
+	sum(product_qty) as qty, 
+	(sum(product_qty) * liter) as liter,
+	state, 
+	product_template.name,
+	'''' || product_product.barcode
+from 
+	mrp_production, 
+	product_template,
+	product_product
+where 
+	mrp_production.product_id=product_product.id
+and
+	mrp_production.state='done'
+and
+-- To use for current production level statistics, put the number of current month minus one 
+-- i.e. If today's month is October (10), put 9 - We want all the finished months,
+-- october is assumed to have just started so we get the last 9 months to end of September)
+-- In January for the whole year, use '12'
+-- To use for valvira, either put the exact dates bellow or use minus 4
+	(mrp_production.date_finished >= date_trunc('month', current_date - interval '2' month)
+ 		and mrp_production.date_finished < date_trunc('month', current_date)) 
+		
+--		( mrp_production.date_finished >= '2019-01-01' and mrp_production.date_finished < '2020-01-01')  	
+
+and
+	product_template.id=product_product.product_tmpl_id 
+and 
+	product_product.barcode is not null
+group by
+	product_product.barcode,
+	state,
+	product_template.name,
+	liter
+order by
+	product_template.name
+
+)
+select 'GRAND TOTAL' as name, sum(qty) as qty, '', sum(liter) as liter from tempTable
+union all
+select name, qty, barcode, liter from tempTable order by qty asc
+	
+
+	
+) TO
+	'/tmp/valvira-quartely-report.csv'
+WITH CSV DELIMITER '|';
+
+
+
+## OS commands bellow here
+## COPY all the files
+
+
+UNIX
+
+sftp bitnami@erp.coolhead.fi
+get /tmp/palpa-report.csv
+get /tmp/palpa-refunds.csv
+get /tmp/vero-report.csv
+get /tmp/vero-refund-report.csv
+get /tmp/beer-canned-report.csv
+get /tmp/beer-kegged-report.csv
+get /tmp/valvira-monthly-report.csv
+get /tmp/valvira-monthly-refunds-report.csv
+get /tmp/valvira-quartely-report.csv
+
+exit
+mv palpa-report.csv ~/Dropbox/business/_planbeer/reports/palpa/$(expr $(date +%Y%m) - 1)-palpa-report.csv 
+mv palpa-refunds.csv ~/Dropbox/business/_planbeer/reports/palpa/$(expr $(date +%Y%m) - 1)-palpa-refunds.csv
+mv vero-report.csv ~/Dropbox/business/_planbeer/reports/vero/$(expr $(date +%Y%m) - 1)-vero-report.csv 
+mv vero-refund-report.csv ~/Dropbox/business/_planbeer/reports/vero/$(expr $(date +%Y%m) - 1)-vero-refund-report.csv 
+mv beer-canned-report.csv ~/Dropbox/business/_planbeer/reports/vero/$(expr $(date +%Y%m) - 1)-beer-canned-report.csv
+mv beer-kegged-report.csv ~/Dropbox/business/_planbeer/reports/vero/$(expr $(date +%Y%m) - 1)-beer-kegged-report.csv
+mv valvira-monthly-report.csv ~/Dropbox/business/_planbeer/reports/valvira/$(expr $(date +%Y%m) - 1)-valvira-monthly-report.csv
+mv valvira-monthly-refunds-report.csv ~/Dropbox/business/_planbeer/reports/valvira/$(expr $(date +%Y%m) - 1)-valvira-monthly-refunds-report.csv
+mv valvira-quartely-report.csv ~/Dropbox/business/_planbeer/reports/valvira/$(expr $(date +%Y%m) - 1)-valvira-quartely-report.csv
+
+
+
+WIN
+
+Open putty FTP client (already configured with the key) and open the host
+open erp.coolhead.fi
+==> Use the GET commands on the unix section
+
+## On Git shell
+mv /c/apps/putty/palpa-report.csv ~/Dropbox/business/_planbeer/reports/palpa/$(expr $(date +%Y%m) - 1)-palpa-report.csv 
+mv /c/apps/putty/palpa-refunds.csv ~/Dropbox/business/_planbeer/reports/palpa/$(expr $(date +%Y%m) - 1)-palpa-refunds.csv
+mv /c/apps/putty/vero-report.csv ~/Dropbox/business/_planbeer/reports/vero/$(expr $(date +%Y%m) - 1)-vero-report.csv 
+mv /c/apps/putty/vero-refund-report.csv ~/Dropbox/business/_planbeer/reports/vero/$(expr $(date +%Y%m) - 1)-vero-refund-report.csv 
+mv /c/apps/putty/beer-canned-report.csv ~/Dropbox/business/_planbeer/reports/vero/$(expr $(date +%Y%m) - 1)-beer-canned-report.csv
+mv /c/apps/putty/beer-kegged-report.csv ~/Dropbox/business/_planbeer/reports/vero/$(expr $(date +%Y%m) - 1)-beer-kegged-report.csv
+mv /c/apps/putty/valvira-monthly-report.csv ~/Dropbox/business/_planbeer/reports/valvira/$(expr $(date +%Y%m) - 1)-valvira-monthly-report.csv
+mv /c/apps/putty/valvira-monthly-refunds-report.csv ~/Dropbox/business/_planbeer/reports/valvira/$(expr $(date +%Y%m) - 1)-valvira-monthly-refunds-report.csv
+mv /c/apps/putty/valvira-quartely-report.csv ~/Dropbox/business/_planbeer/reports/valvira/$(expr $(date +%Y%m) - 1)-valvira-quartely-report.csv
+
+
+==========
+
+USEFUL Queries
+
+
+# Cleaning up
+update product_template set categ_id=17 where name like '%wort%' or name like '%Wort%'; 
+update product_template set categ_id=20 where name like '%sticker%' or name like '%Sticker%' or name like '%STICKER%';
+update product_template set categ_id=20 where name like '%label%' or name like '%Label%'; 
+update product_template set categ_id=4 where name like '%hop%' or name like '%Hop%';
+update product_template set categ_id=5 where name like '%malt%' or name like '%Malt%'; 
+update product_template set categ_id=5 where name like '%Puree%' or name like '%puree%'; 
+update product_template set categ_id=5 where name like '%Juice%' or name like '%juice%'; 
+update product_template set categ_id=10 where (name like '%10L%' or name like '%20L%' or name like '%30L%') and (name not like '%Divosan%' and name not like '%mpty%' and name not like '%otameter%'  ) ;
+update product_template set categ_id=10 where (name like '%0.33%'or name like '%330%' or name like '%24x330%') and (name not like '%Blanka%' and name not like '%Champagne%');
+update product_template set categ_id=10 where name like '%375%' or name like '%0.375%' or name like '%12x375%';
+update product_template set categ_id=10 where name like '%750%' or name like '%0.75%'or name like '%6x750%';
+update product_template set categ_id=20 where name like '%Champagne%' or name like '%Blanka%' or name like '%mpty%'; 
+
+
+
+#CATEGORIES
+
+# Product and category it belongs to
+select product_template.name, product_category.name, categ_id from product_template, product_category where product_category.id=categ_id and categ_id=10;
+
+# products per category
+select count(categ_id), product_category.name from product_template, product_category where categ_id=product_category.id group by product_category.name;
+
+
+
+
+-- The original document that generated a refund invoice (some will have 'null' if they are created using the 'is refund' checkbox)
+-- number not in (select origin from account_invoice where type like '%_refund' and origin is not null)
+
+
+# Product having a certain barcode
+
+select 
+	product_template.name, 
+	product_product.barcode 
+from 
+	product_template, 
+	product_product 
+where 
+	product_template.id=product_product.product_tmpl_id
+and
+	product_product.barcode='06430062242188'
+
+
+
+# update the license numbers 
+update res_partner set alcohol_license='01048192' where id='581';
+
+
+update 
+	res_partner 
+set 
+	alcohol_license='30050418' 
+where 
+	id=571
+
+	
+# Best Before
+select name, use_time, life_time, removal_time, alert_time, active, sale_ok from product_template where sale_ok='t' and active='t';
+
+# Exports
+select res_partner.display_name from res_partner where alcohol_license is NULL;
+
+
+
+=========================
+
+# Manufactured against sold products
+##  BROKEN
+
+
+select 
+   	product_template.name as product,
+	--mrp_production.name as MO,
+	mrp_production.product_qt as manufactured,
+	sum(account_invoice_line.quantity) as sold,
+	stock_production_lot.name as lot  
+
+from
+	mrp_production, account_invoice, account_invoice_line, product_template, product_product, stock_move_lots, stock_production_lot
+where 
+	(mrp_production.state='done' and (account_invoice.state='open' or account_invoice.state='paid')) 
+and 
+	mrp_production.product_id =  product_template.id   			-- product manufactured = product displayed
+and
+	mrp_production.product_id = stock_move_lots.product_id 			-- product manufactured = product lot
+and
+	stock_move_lots.lot_id = stock_production_lot.id  			-- get access to lot name
+and	
+	account_invoice.id=account_invoice_line.invoice_id 			-- get access to invoice lines for quantities invoiced
+and 	
+	product_template.id=product_product.product_tmpl_id			-- get access to product name
+and 
+	account_invoice_line.product_id=product_product.id  			-- invoiced product = displayed product
+and
+	product_product.id = stock_production_lot.product_id 			-- product displayed is same as in lot
+and
+	account_invoice_line.product_id = stock_production_lot.product_id
+
+group by 
+	product_template.name,
+--	MO,
+	manufactured,
+	lot
+order by 
+--	mrp_production.name
+        stock_production_lot.name
+;
+
+
+**** CHECK THIS.lot number from manufacturing order
+
+select 
+	stock_move_lots.lot_id, stock_move_lots.product_id, l1.name, l2.name 
+from 
+	stock_move_lots 
+left join 
+	stock_production_lot l1 on stock_move_lots.lot_id = l1.id 
+left join 
+	stock_production_lot l2 on stock_move_lots.lot_produced_id = l2.id 
+where 
+	production_id = 10 ;
+
+	https://www.odoo.com/documentation/user/9.0/inventory/management/lots_serial_numbers/serial_numbers.html
+
+

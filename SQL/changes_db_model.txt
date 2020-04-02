@@ -1,0 +1,32 @@
+Modifications to Odoo model
+
+VERO REPORT
+=============
+
+- res_partner
+
+	+ Excise liable, boolean, whether this customer needs to pay excise when buying from us or not
+		- Alko central
+		- Kesko???
+		- Export to EU
+		- Export outside of EU
+
+	+ Excise number, char, customer's excise number issued by their customs authority
+	+ Excise Warehouse, char, number of the customer's bounded warehouse, issued by their customs authority		
+
+
+	
+- product_template
+	+ alcohol_pct, float, percentage of alcohol in the beer
+	+ liters, float, amount of liters on the package
+	+ alcohol_cl, centiliters of alcohol in the package, calculated field, not persisted?
+	+ Package tax liable, (can or keg) dropbox?, whether or not this type of package is liable to pay tax due to environment damages
+	
+=> There is a VAT field in the base_vat add on? Test. Enable it
+
+
+VALVIRA MONTHLY REPORT
+======================
+
+- res_partner
+	+ Alcohol_license, char, License to sell alcohol to end users
