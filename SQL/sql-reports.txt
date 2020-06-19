@@ -15,6 +15,9 @@ ssh bitnami@erp.coolhead.fi
 psql -U postgres -d bitnami_odoo
 cMQr4BoIC7XE
 
+## Master password (for DB backups at https://erp.coolhead.fi/web/database/manager | https://linuxize.com/post/how-to-setup-automatic-odoo-backup/)
+63ea9920
+
 --FIRST MAKE SURE THE DATA MAKES SENSE
 --------------------------------------
 
@@ -193,35 +196,11 @@ and
 and
 	number not in (select number from account_invoice where type like '%_refund')
 and 
-	product_template.name!='Posti'		
-and
-	product_template.name NOT LIKE '%empty%'
+	product_product.barcode is not null
 and 
-	product_template.name NOT LIKE '%eanie %'
+	product_template.liter > 0
 and 
-	product_template.name NOT LIKE '%Paper bag%'
-and 
-	product_template.name NOT LIKE '%delivery%'
-and 
-	product_template.name NOT LIKE '%Viking%'
-and 
-	product_template.name NOT LIKE '%Blanka%'
-and 
-	product_template.name NOT LIKE '%freight%'
-and 
-	product_template.name NOT LIKE '%T-Shirt%'
-and 
-	product_template.name NOT LIKE '%t-shirt%'
-and 
-	product_template.name NOT LIKE '%Brewery Tour%'	
-and 
-	product_template.name NOT LIKE '%Lindr beer cooler%'		
-and 
-	product_template.name NOT LIKE '%Canvas Bag%'	
-and 
-	product_template.name NOT LIKE '%Beer Tap%'
-and 
-	product_template.name NOT LIKE '%4 pack can%'
+	product_template.alcohol_pct > 0
 group by 
 	product_template.name, alcohol_pct, liter, res_partner.display_name
 order by 
@@ -270,6 +249,7 @@ and
 -- Include only refunds, cancelled invoices and stuff returned to stock
 	number in (select number from account_invoice where type like '%_refund')
 and 
+	product_product.barcode is not null
 	product_template.name!='Posti'		
 and
 	product_template.name NOT LIKE '%empty%'
@@ -618,10 +598,10 @@ and
 -- october is assumed to have just started so we get the last 9 months to end of September)
 -- In January for the whole year, use '12'
 -- To use for valvira, either put the exact dates bellow or use minus 4
-	(mrp_production.date_finished >= date_trunc('month', current_date - interval '2' month)
- 		and mrp_production.date_finished < date_trunc('month', current_date)) 
+--	(mrp_production.date_finished >= date_trunc('month', current_date - interval '1' month)
+-- 		and mrp_production.date_finished < date_trunc('month', current_date)) 
 		
---		( mrp_production.date_finished >= '2019-01-01' and mrp_production.date_finished < '2020-01-01')  	
+		( mrp_production.date_finished >= '2020-01-01' and mrp_production.date_finished < '2020-05-01')  	
 
 and
 	product_template.id=product_product.product_tmpl_id 
